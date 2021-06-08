@@ -17,6 +17,10 @@ module KFMMC_Interface #(
     input   logic           check_data_start_bit,
     input   logic           clear_command_crc,
     input   logic           clear_data_crc,
+    input   logic           clear_command_interrupt,
+    input   logic           clear_data_interrupt,
+    input   logic           mask_command_interrupt,
+    input   logic           mask_data_interrupt,
     input   logic           set_send_command,
     input   logic   [7:0]   send_command,
     input   logic           set_send_data,
@@ -29,6 +33,7 @@ module KFMMC_Interface #(
     output  logic   [15:0]  send_data_crc,
     output  logic   [15:0]  received_data_crc,
 
+    output  logic           in_connecting,
     output  logic           sent_command_interrupt,
     output  logic           received_response_interrupt,
     output  logic           sent_data_interrupt,
@@ -64,6 +69,9 @@ module KFMMC_Interface #(
     logic   [7:0]   tx_data_register;
 
     logic   [31:0]  timeout_counter;
+
+    logic           mask_command_interrupt_ff;
+    logic           mask_data_interrupt_ff;
 
     logic           access_flag;
 
@@ -230,7 +238,7 @@ module KFMMC_Interface #(
             sent_command_interrupt <= 1'b0;
         else if (mmc_cmd_io == 1'b1)
             sent_command_interrupt <= 1'b0;
-        else if (start_communication)
+        else if ((start_communication) && (clear_command_interrupt))
             sent_command_interrupt <= 1'b0;
         else if ((command_bit_count == 4'd8) && (shift_edge))
             sent_command_interrupt <= 1'b1;
@@ -244,7 +252,7 @@ module KFMMC_Interface #(
             received_response_interrupt <= 1'b0;
         else if (mmc_cmd_io == 1'b0)
             received_response_interrupt <= 1'b0;
-        else if (start_communication)
+        else if ((start_communication) && (clear_command_interrupt))
             received_response_interrupt <= 1'b0;
         else if ((command_bit_count == 4'd8) && (shift_edge))
             received_response_interrupt <= 1'b1;
@@ -378,7 +386,7 @@ module KFMMC_Interface #(
             sent_data_interrupt <= 1'b0;
         else if (mmc_dat_io == 1'b1)
             sent_data_interrupt <= 1'b0;
-        else if (start_communication)
+        else if ((start_communication) && (clear_data_interrupt))
             sent_data_interrupt <= 1'b0;
         else if ((data_bit_count == 4'd8) && (shift_edge))
             sent_data_interrupt <= 1'b1;
@@ -392,7 +400,7 @@ module KFMMC_Interface #(
             received_data_interrupt <= 1'b0;
         else if (mmc_dat_io == 1'b0)
             received_data_interrupt <= 1'b0;
-        else if (start_communication)
+        else if ((start_communication) && (clear_data_interrupt))
             received_data_interrupt <= 1'b0;
         else if ((data_bit_count == 4'd8) && (shift_edge))
             received_data_interrupt <= 1'b1;
@@ -456,12 +464,31 @@ module KFMMC_Interface #(
     end
 
     //
+    // Interrupt mask
+    //
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset) begin
+            mask_command_interrupt_ff <= 1'b0;
+            mask_data_interrupt_ff    <= 1'b0;
+        end
+        else if ((~access_flag) || (shift_edge)) begin
+            mask_command_interrupt_ff <= mask_command_interrupt;
+            mask_data_interrupt_ff    <= mask_data_interrupt;
+        end
+        else begin
+            mask_command_interrupt_ff <= mask_command_interrupt_ff;
+            mask_data_interrupt_ff    <= mask_data_interrupt_ff;
+        end
+    end
+
+    //
     // access flag
     //
-    assign  access_flag = ~(sent_command_interrupt      |
-                            received_response_interrupt |
-                            sent_data_interrupt         |
-                            received_data_interrupt     |
+    assign  access_flag = ~((sent_command_interrupt      & ~mask_command_interrupt_ff) |
+                            (received_response_interrupt & ~mask_command_interrupt_ff) |
+                            (sent_data_interrupt         & ~mask_data_interrupt_ff)    |
+                            (received_data_interrupt     & ~mask_data_interrupt_ff)    |
                             timeout_interrupt);
+    assign  in_connecting = access_flag;
 endmodule
 
