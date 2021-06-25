@@ -73,6 +73,7 @@ module KFMMC_Interface #(
     logic           mask_command_interrupt_ff;
     logic           mask_data_interrupt_ff;
 
+    logic           disable_access;
     logic           access_flag;
 
     //
@@ -484,11 +485,12 @@ module KFMMC_Interface #(
     //
     // access flag
     //
-    assign  access_flag = ~((sent_command_interrupt      & ~mask_command_interrupt_ff) |
-                            (received_response_interrupt & ~mask_command_interrupt_ff) |
-                            (sent_data_interrupt         & ~mask_data_interrupt_ff)    |
-                            (received_data_interrupt     & ~mask_data_interrupt_ff)    |
-                            timeout_interrupt);
-    assign  in_connecting = access_flag;
+    assign  disable_access  = mask_command_interrupt_ff & mask_command_interrupt_ff & mask_data_interrupt_ff & mask_data_interrupt_ff;
+    assign  in_connecting   = ~((sent_command_interrupt      & ~mask_command_interrupt_ff) |
+                                (received_response_interrupt & ~mask_command_interrupt_ff) |
+                                (sent_data_interrupt         & ~mask_data_interrupt_ff)    |
+                                (received_data_interrupt     & ~mask_data_interrupt_ff)    |
+                                timeout_interrupt | disable_access);
+    assign  access_flag     = in_connecting & ~start_communication & ~disable_access;
 endmodule
 
