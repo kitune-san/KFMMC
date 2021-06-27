@@ -12,10 +12,10 @@ module KFMMC_Command_IO (
     input   logic   [47:0]  command,
     input   logic           enable_command_crc,
     input   logic           enable_response_crc,
-    input   logic   [3:0]   response_length,
+    input   logic   [4:0]   response_length,
 
     output  logic           command_busy,
-    output  logic   [55:0]  response,
+    output  logic   [135:0] response,
     output  logic           response_error,
 
     output  logic           start_communication_to_mmc,
@@ -47,7 +47,7 @@ module KFMMC_Command_IO (
     command_state_t next_command_state;
     logic   [39:0]  command_buffer;
     logic   [2:0]   send_count;
-    logic   [3:0]   recv_count;
+    logic   [4:0]   recv_count;
     logic           enable_command_crc_ff;
     logic           enable_response_crc_ff;
     logic   [7:0]   recv_crc;
@@ -138,7 +138,7 @@ module KFMMC_Command_IO (
                 mask_command_interrupt_to_mmc   <= 1'b0;
                 set_send_command_to_mmc         <= 1'b0;
             end
-            else if ((received_response_interrupt_from_mmc) && (recv_count != 3'd1)) begin
+            else if ((received_response_interrupt_from_mmc) && (recv_count != 5'd1)) begin
                 start_communication_to_mmc      <= 1'b1;
                 command_io_to_mmc               <= 1'b1;
                 check_command_start_bit_to_mmc  <= 1'b0;
@@ -228,29 +228,29 @@ module KFMMC_Command_IO (
     //
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
-            recv_count <= 4'd0;
+            recv_count <= 5'd0;
         else if ((start_command) && (command_state == IDLE))
             recv_count <= response_length;
-        else if ((shift_recv_response_data) && (recv_count != 4'd0))
-            recv_count <= recv_count - 4'd1;
+        else if ((shift_recv_response_data) && (recv_count != 5'd0))
+            recv_count <= recv_count - 5'd1;
         else
             recv_count <= recv_count;
     end
 
-    assign  complete_receiving = (recv_count == 4'd0);
+    assign  complete_receiving = (recv_count == 5'd0);
 
     //
     // Receive response byte from mmc
     //
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
-            response <= 56'hFFFFFFFFFFFFFF;
+            response <= 136'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
         else if (command_state != RECV_RESPONSE)
             response <= response;
         else if (complete_receiving)
             response <= response;
         else if (shift_recv_response_data)
-            response <= {response[47:0], received_response_from_mmc};
+            response <= {response[127:0], received_response_from_mmc};
         else
             response <= response;
     end
@@ -273,7 +273,7 @@ module KFMMC_Command_IO (
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
             recv_crc <= 8'b00000000;
-        else if ((enable_response_crc_ff) && (shift_recv_response_data) && (recv_count != 3'd1))
+        else if ((enable_response_crc_ff) && (shift_recv_response_data) && (recv_count != 5'd1))
             recv_crc <= {received_response_crc_from_mmc, 1'b1};
         else
             recv_crc <= recv_crc;
@@ -289,7 +289,7 @@ module KFMMC_Command_IO (
             response_error <= 1'b0;
         else if ((start_command) && (command_state == IDLE))
             response_error <= 1'b0;
-        else if ((enable_response_crc_ff) && (shift_recv_response_data) && (recv_count == 3'd0))
+        else if ((enable_response_crc_ff) && (shift_recv_response_data) && (recv_count == 5'd0))
             if (recv_crc != received_response_from_mmc)
                 response_error <= 1'b1;
             else

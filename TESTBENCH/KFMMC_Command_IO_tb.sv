@@ -68,10 +68,10 @@ module KFMMC_Command_IO_tm();
     logic   [47:0]  command;
     logic           enable_command_crc;
     logic           enable_response_crc;
-    logic   [3:0]   response_length;
+    logic   [4:0]   response_length;
 
     logic           command_busy;
-    logic   [55:0]  response;
+    logic   [135:0] response;
     logic           response_error;
 
     logic           start_communication_to_mmc;
@@ -118,7 +118,7 @@ module KFMMC_Command_IO_tm();
         command                                 = 48'hFFFFFFFFFFFF;
         enable_command_crc                      = 1'b0;
         enable_response_crc                     = 1'b0;
-        response_length                         = 4'b000;
+        response_length                         = 5'b000;
         received_response_from_mmc              = 8'hFF;
         send_command_crc_from_mmc               = 7'h7F;
         received_response_crc_from_mmc          = 7'h7F;
