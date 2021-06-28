@@ -394,10 +394,11 @@ module KFMMC_Controller #(
             BUSY_WAIT_CMD7_1: begin
                 disable_data_io         = 1'b0;
                 start_data_io           = 1'b1;
-                check_data_start_bit    = 1'b0;
+                check_data_start_bit    = 1'b1;
                 data_io                 = 1'b1;
             end
             BUSY_WAIT_CMD7_2: begin
+                disable_data_io         = 1'b0;
             end
             READY: begin
             end
