@@ -19,7 +19,8 @@ module KFMMC_Controller #(
     input   logic           write_access_command,
     input   logic           write_data,
 
-    output  logic   [7:0]   read_data,
+    output  logic   [7:0]   read_data_byte,
+    input   logic           read_data,
 
     // Control MMC signals
     // Output (to Command I/O)
@@ -52,18 +53,23 @@ module KFMMC_Controller #(
 
     // State
     output  logic           drive_busy,
-    output  logic           drive_wait_next_data,
+
+    // Error flags
+    output  logic           read_interface_error,
+    output  logic           read_crc_error,
 
     // External input/output
-    output  logic           interrupt,
-    input   logic           terminal_count
+    output  logic           block_read_interrupt,
+    output  logic           read_completion_interrupt
 );
 
     // State
     typedef enum {INIT, RESET_CLK_1, RESET_CLK_2, SEND_CMD0, WAIT_TO_SEND_CMD0, SEND_DUMMY, WAIT_TO_SEND_DUMMY, SEND_CMD8,
         RESP_CMD8, SEND_CMD1, RESP_CMD1, SEND_CMD55, RESP_CMD55, SEND_ACMD41, RESP_ACMD41, SEND_CMD58, SEND_INITIALIZE_DUMMY,
         WAIT_TO_SEND_INITIALIZE_DUMMY, SEND_CMD2, RESP_CMD2, SEND_CMD3, RESP_CMD3, SEND_CMD9, RESP_CMD9, SEND_CMD7, RESP_CMD7,
-        BUSY_WAIT_CMD7_1, BUSY_WAIT_CMD7_2, READY} control_state_t;
+        BUSY_WAIT_1, BUSY_WAIT_2, READY,
+        SEND_CMD17, READ_DATA_BLOCK, COMPLETE_TO_READ
+    } control_state_t;
 
     //
     // Internal signals
@@ -75,7 +81,11 @@ module KFMMC_Controller #(
     logic   [3:0]   reset_pulse_count;
     logic           mmc_reset;
     logic           emmc_reset;
+
+    logic           read_next_byte;
+
     logic   [16:0]  access_count;
+
     logic   [32:0]  ocr;
     logic   [127:0] cid;
     logic   [15:0]  rca;
@@ -229,13 +239,13 @@ module KFMMC_Controller #(
                     if (response[27] == 1'b1)
                         next_control_state = INIT;
                     else
-                        next_control_state = BUSY_WAIT_CMD7_1;
+                        next_control_state = BUSY_WAIT_1;
             end
-            BUSY_WAIT_CMD7_1: begin
+            BUSY_WAIT_1: begin
                 if (busy)
-                    next_control_state = BUSY_WAIT_CMD7_2;
+                    next_control_state = BUSY_WAIT_2;
             end
-            BUSY_WAIT_CMD7_2: begin
+            BUSY_WAIT_2: begin
                 if (timeout_interrupt)
                     next_control_state = READY;
                 else if (~busy)
@@ -243,12 +253,33 @@ module KFMMC_Controller #(
                         next_control_state = READY;
             end
             READY: begin
-                if (write_data)
+                if (write_access_command)
                     if (internal_data_bus == 8'b10000000)       // Read command
-                        next_control_state = READY;     // TODO:
+                        next_control_state = SEND_CMD17;
                     else if (internal_data_bus == 8'b10000001)  // Write command
                         next_control_state = READY;     // TODO:
             end
+
+            //
+            // Block read
+            //
+            SEND_CMD17: begin
+                if (busy)
+                    next_control_state = READ_DATA_BLOCK;
+            end
+            READ_DATA_BLOCK: begin
+                if (~busy)
+                    if (access_count == 16'h0000)
+                        next_control_state = COMPLETE_TO_READ;
+            end
+            COMPLETE_TO_READ: begin
+                if (read_data)
+                    if (read_interface_error)
+                        next_control_state = INIT;
+                    else
+                        next_control_state = BUSY_WAIT_1;
+            end
+
             default: begin
                 //next_control_state = INIT;
             end
@@ -391,17 +422,57 @@ module KFMMC_Controller #(
             end
             RESP_CMD7: begin
             end
-            BUSY_WAIT_CMD7_1: begin
+            BUSY_WAIT_1: begin
                 disable_data_io         = 1'b0;
                 start_data_io           = 1'b1;
-                check_data_start_bit    = 1'b1;
+                check_data_start_bit    = 1'b0;
                 data_io                 = 1'b1;
             end
-            BUSY_WAIT_CMD7_2: begin
+            BUSY_WAIT_2: begin
                 disable_data_io         = 1'b0;
             end
             READY: begin
             end
+
+            //
+            // Block read
+            //
+            SEND_CMD17: begin
+                start_command           = 1'b1;
+                command[47:40]          = 8'h51;
+                if (ocr[30] == 1'b0)
+                    command[39:8]       = {block_address[22:0], 9'b000000000};
+                else
+                    command[39:8]       = block_address;
+                command[7:0]            = 8'h00;
+                enable_command_crc      = 1'b1;
+                enable_response_crc     = 1'b1;
+                response_length         = 5'd6;
+
+                disable_data_io         = 1'b0;
+                start_data_io           = 1'b1;
+                check_data_start_bit    = 1'b1;
+                clear_data_crc          = 1'b1;
+                data_io                 = 1'b1;
+            end
+            READ_DATA_BLOCK: begin
+                disable_data_io         = 1'b0;
+                start_data_io           = 1'b0;
+                check_data_start_bit    = 1'b0;
+                clear_data_crc          = 1'b0;
+                data_io                 = 1'b1;
+
+                // For forcibly reading
+                if ((data_io_busy) && (timeout_interrupt))
+                    disable_data_io     = 1'b1;
+
+                // Read next byte data
+                if ((~data_io_busy) && (read_next_byte))
+                    start_data_io       = 1'b1;
+            end
+            COMPLETE_TO_READ: begin
+            end
+
             default: begin
             end
         endcase
@@ -465,13 +536,74 @@ module KFMMC_Controller #(
             mmc_clock_cycle <= mmc_clock_cycle;
     end
 
+    // Reading crc byte flag
+    wire    reading_crc_byte = (access_count == 16'h0001) || (access_count == 16'h0000);
+
+    // Interrupt to read data
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            block_read_interrupt <= 1'b0;
+        else if ((read_data) && (block_read_interrupt))
+            block_read_interrupt <= 1'b0;
+        else if ((control_state == READ_DATA_BLOCK)
+            && (~data_io_busy) && (~read_next_byte) && (~reading_crc_byte))
+            block_read_interrupt <= 1'b1;
+        else
+            block_read_interrupt <= block_read_interrupt;
+    end
+
+    // Signal to read next data
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            read_next_byte <= 1'b0;
+        else if (data_io_busy)
+            read_next_byte <= 1'b0;
+        else if ((read_data) && (block_read_interrupt))
+            read_next_byte <= 1'b1;
+        else if (reading_crc_byte)
+            read_next_byte <= 1'b1;
+        else
+            read_next_byte <= read_next_byte;
+    end
+
+    // Complete to read
+    assign  read_completion_interrupt = (control_state == COMPLETE_TO_READ);
+
+    // Catch block read error
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            read_interface_error <= 1'b0;
+        else if (control_state == READY)
+            read_interface_error <= 1'b0;
+        else if ((control_state == READ_DATA_BLOCK) && (error))
+            read_interface_error <= 1'b1;
+        else
+            read_interface_error <= read_interface_error;
+    end
+
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            read_crc_error <= 1'b0;
+        else if (control_state == READY)
+            read_crc_error <= 1'b0;
+        else if ((control_state == READ_DATA_BLOCK)
+            && (~data_io_busy) && (access_count == 16'h0000) && (received_data_crc != 16'h0000))
+            read_crc_error <= 1'b1;
+        else
+            read_crc_error <= read_crc_error;
+    end
+
     // access count
+    wire    read_count_down = read_next_byte & data_io_busy;
+
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
             access_count <= 16'h0000;
         else if (control_state == READY)
-            access_count <= access_block_size;
-        else if (1'b0)  // TODO:
+            access_count <= access_block_size + 1;
+        else if ((control_state == READ_DATA_BLOCK) && (read_count_down))
+            access_count <= access_count - 16'h0001;
+        else if (1'b0)  // TODO:Write Operation
             access_count <= access_count - 16'h0001;
         else
             access_count <= access_count;
@@ -538,7 +670,7 @@ module KFMMC_Controller #(
     end
 
     // Read data
-    // TODO:
+    assign  read_data_byte = received_data;
 
     //
     // Status

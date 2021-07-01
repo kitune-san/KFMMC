@@ -19,15 +19,19 @@ module KFMMC_Drive #(
     input   logic           write_access_command,
     input   logic           write_data,
 
-    output  logic   [7:0]   read_data,
+    output  logic   [7:0]   read_data_byte,
+    input   logic           read_data,
 
     // State
-    output  logic           drive_selected,
     output  logic           drive_busy,
 
+    // Error flags
+    output  logic           read_interface_error,
+    output  logic           read_crc_error,
+
     // External input/output
-    output  logic           interrupt,
-    input   logic           terminal_count,
+    output  logic           block_read_interrupt,
+    output  logic           read_completion_interrupt,
 
     output  logic           mmc_clk,
     input   logic           mmc_cmd_in,
@@ -83,6 +87,7 @@ module KFMMC_Drive #(
         .write_block_address_4                  (write_block_address_4),
         .write_access_command                   (write_access_command),
         .write_data                             (write_data),
+        .read_data_byte                         (read_data_byte),
         .read_data                              (read_data),
 
         .reset_command_state                    (reset_command_state),
@@ -114,8 +119,11 @@ module KFMMC_Drive #(
 
         .drive_busy                             (drive_busy),
 
-        .interrupt                              (interrupt),
-        .terminal_count                         (terminal_count)
+        .read_interface_error                   (read_interface_error),
+        .read_crc_error                         (read_crc_error),
+
+        .block_read_interrupt                   (block_read_interrupt),
+        .read_completion_interrupt              (read_completion_interrupt)
     );
 
 
