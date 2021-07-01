@@ -544,7 +544,7 @@ module KFMMC_Controller #(
     // Status
     //
     // Drive is busy
-    assign  drive_busy = (control_state == READY);
+    assign  drive_busy = ~(control_state == READY);
 
 endmodule
 
