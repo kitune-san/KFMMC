@@ -74,6 +74,7 @@ module KFMMC_Data_IO_tm();
     logic           start_communication_to_mmc;
     logic           data_io_to_mmc;
     logic           check_data_start_bit_to_mmc;
+    logic           read_continuous_data_to_mmc;
     logic           clear_data_crc_to_mmc;
     logic           clear_data_interrupt_to_mmc;
     logic           mask_data_interrupt_to_mmc;

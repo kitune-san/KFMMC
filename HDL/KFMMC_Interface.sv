@@ -15,6 +15,7 @@ module KFMMC_Interface #(
     input   logic           data_io,
     input   logic           check_command_start_bit,
     input   logic           check_data_start_bit,
+    input   logic           read_continuous_data,
     input   logic           clear_command_crc,
     input   logic           clear_data_crc,
     input   logic           clear_command_interrupt,
@@ -311,6 +312,8 @@ module KFMMC_Interface #(
                 detect_data_start_bit <= 1'b0;
             else if ((data_io == 1'b1) && (check_data_start_bit))
                 detect_data_start_bit <= 1'b0;
+            else if ((data_io == 1'b1) && (read_continuous_data))
+                detect_data_start_bit <= 1'b1;
             else
                 detect_data_start_bit <= detect_data_start_bit;
         else if ((mmc_dat_io == 1'b1) && (sample_edge) && (~mmc_dat_in))

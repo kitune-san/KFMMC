@@ -19,6 +19,7 @@ module KFMMC_Data_IO (
     output  logic           start_communication_to_mmc,
     output  logic           data_io_to_mmc,
     output  logic           check_data_start_bit_to_mmc,
+    output  logic           read_continuous_data_to_mmc,
     output  logic           clear_data_crc_to_mmc,
     output  logic           clear_data_interrupt_to_mmc,
     output  logic           mask_data_interrupt_to_mmc,
@@ -88,6 +89,7 @@ module KFMMC_Data_IO (
             start_communication_to_mmc      <= 1'b0;
             data_io_to_mmc                  <= 1'b1;
             check_data_start_bit_to_mmc     <= 1'b0;
+            read_continuous_data_to_mmc     <= 1'b0;
             clear_data_crc_to_mmc           <= 1'b0;
             clear_data_interrupt_to_mmc     <= 1'b0;
             mask_data_interrupt_to_mmc      <= 1'b0;
@@ -97,6 +99,7 @@ module KFMMC_Data_IO (
             start_communication_to_mmc      <= 1'b0;
             data_io_to_mmc                  <= 1'b1;
             check_data_start_bit_to_mmc     <= 1'b0;
+            read_continuous_data_to_mmc     <= 1'b0;
             clear_data_crc_to_mmc           <= 1'b0;
             clear_data_interrupt_to_mmc     <= 1'b0;
             mask_data_interrupt_to_mmc      <= 1'b1;
@@ -108,6 +111,7 @@ module KFMMC_Data_IO (
                     start_communication_to_mmc      <= 1'b0;
                     data_io_to_mmc                  <= 1'b1;
                     check_data_start_bit_to_mmc     <= 1'b0;
+                    read_continuous_data_to_mmc     <= 1'b0;
                     clear_data_crc_to_mmc           <= 1'b0;
                     clear_data_interrupt_to_mmc     <= 1'b0;
                     mask_data_interrupt_to_mmc      <= 1'b0;
@@ -118,6 +122,7 @@ module KFMMC_Data_IO (
                         start_communication_to_mmc      <= 1'b1;
                         data_io_to_mmc                  <= 1'b0;
                         check_data_start_bit_to_mmc     <= 1'b0;
+                        read_continuous_data_to_mmc     <= 1'b0;
                         clear_data_crc_to_mmc           <= clear_data_crc_ff;
                         clear_data_interrupt_to_mmc     <= 1'b1;
                         mask_data_interrupt_to_mmc      <= 1'b0;
@@ -127,6 +132,7 @@ module KFMMC_Data_IO (
                         start_communication_to_mmc      <= 1'b0;
                         data_io_to_mmc                  <= 1'b0;
                         check_data_start_bit_to_mmc     <= 1'b0;
+                        read_continuous_data_to_mmc     <= 1'b0;
                         clear_data_crc_to_mmc           <= 1'b0;
                         clear_data_interrupt_to_mmc     <= 1'b0;
                         mask_data_interrupt_to_mmc      <= 1'b0;
@@ -138,6 +144,7 @@ module KFMMC_Data_IO (
                         start_communication_to_mmc      <= 1'b1;
                         data_io_to_mmc                  <= 1'b1;
                         check_data_start_bit_to_mmc     <= check_data_start_bit_ff;
+                        read_continuous_data_to_mmc     <= ~check_data_start_bit_ff;
                         clear_data_crc_to_mmc           <= clear_data_crc_ff;
                         clear_data_interrupt_to_mmc     <= 1'b1;
                         mask_data_interrupt_to_mmc      <= 1'b0;
@@ -147,6 +154,7 @@ module KFMMC_Data_IO (
                         start_communication_to_mmc      <= 1'b0;
                         data_io_to_mmc                  <= 1'b1;
                         check_data_start_bit_to_mmc     <= 1'b0;
+                        read_continuous_data_to_mmc     <= 1'b0;
                         clear_data_crc_to_mmc           <= 1'b0;
                         clear_data_interrupt_to_mmc     <= 1'b0;
                         mask_data_interrupt_to_mmc      <= 1'b0;

@@ -181,6 +181,7 @@ module KFMMC_Drive #(
     logic           start_communication_from_data_io;
     logic           data_io_to_mmc;
     logic           check_data_start_bit_to_mmc;
+    logic           read_continuous_data_to_mmc;
     logic           clear_data_crc_to_mmc;
     logic           clear_data_interrupt_to_mmc;
     logic           mask_data_interrupt_to_mmc;
@@ -208,6 +209,7 @@ module KFMMC_Drive #(
         .start_communication_to_mmc             (start_communication_from_data_io),
         .data_io_to_mmc                         (data_io_to_mmc),
         .check_data_start_bit_to_mmc            (check_data_start_bit_to_mmc),
+        .read_continuous_data_to_mmc            (read_continuous_data_to_mmc),
         .clear_data_crc_to_mmc                  (clear_data_crc_to_mmc),
         .clear_data_interrupt_to_mmc            (clear_data_interrupt_to_mmc),
         .mask_data_interrupt_to_mmc             (mask_data_interrupt_to_mmc),
@@ -237,6 +239,7 @@ module KFMMC_Drive #(
         .data_io                                (data_io_to_mmc),
         .check_command_start_bit                (check_command_start_bit_to_mmc),
         .check_data_start_bit                   (check_data_start_bit_to_mmc),
+        .read_continuous_data                   (read_continuous_data_to_mmc),
         .clear_command_crc                      (clear_command_crc_to_mmc),
         .clear_data_crc                         (clear_data_crc_to_mmc),
         .clear_command_interrupt                (clear_command_interrupt_to_mmc),
