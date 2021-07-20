@@ -57,18 +57,26 @@ module KFMMC_Controller #(
     // Error flags
     output  logic           read_interface_error,
     output  logic           read_crc_error,
+    output  logic           write_interface_error,
 
     // External input/output
     output  logic           block_read_interrupt,
-    output  logic           read_completion_interrupt
+    output  logic           read_completion_interrupt,
+    output  logic           request_write_data_interrupt,
+    output  logic           write_completion_interrupt
 );
 
     // State
-    typedef enum {INIT, RESET_CLK_1, RESET_CLK_2, SEND_CMD0, WAIT_TO_SEND_CMD0, SEND_DUMMY, WAIT_TO_SEND_DUMMY, SEND_CMD8,
+    typedef enum {
+        INIT, RESET_CLK_1, RESET_CLK_2, SEND_CMD0, WAIT_TO_SEND_CMD0, SEND_DUMMY, WAIT_TO_SEND_DUMMY, SEND_CMD8,
         RESP_CMD8, SEND_CMD1, RESP_CMD1, SEND_CMD55, RESP_CMD55, SEND_ACMD41, RESP_ACMD41, SEND_CMD58, SEND_INITIALIZE_DUMMY,
         WAIT_TO_SEND_INITIALIZE_DUMMY, SEND_CMD2, RESP_CMD2, SEND_CMD3, RESP_CMD3, SEND_CMD9, RESP_CMD9, SEND_CMD7, RESP_CMD7,
         BUSY_WAIT_1, BUSY_WAIT_2, READY,
-        SEND_CMD17, READ_DATA_BLOCK, COMPLETE_TO_READ
+        // Read
+        SEND_CMD17, READ_DATA_BLOCK, COMPLETE_TO_READ,
+        // Write
+        SEND_CMD24, RESP_CMD24, SEND_START_DATA_BIT, SEND_WRITE_DATA, WAIT_TO_SEND_WRITE_DATA,
+        SEND_CRC_DATA, WAIT_TO_SEND_CRC_DATA, START_TO_RESV_CRC_STATUS, RECV_CRC_STATUS, COMPLETE_TO_WRITE
     } control_state_t;
 
     //
@@ -83,6 +91,11 @@ module KFMMC_Controller #(
     logic           emmc_reset;
 
     logic           read_next_byte;
+
+    logic           write_next_byte;
+    logic   [7:0]   write_data_buffer;
+    logic   [15:0]  write_data_crc;
+    logic           send_crc_count;
 
     logic   [16:0]  access_count;
 
@@ -257,7 +270,7 @@ module KFMMC_Controller #(
                     if (internal_data_bus == 8'b10000000)       // Read command
                         next_control_state = SEND_CMD17;
                     else if (internal_data_bus == 8'b10000001)  // Write command
-                        next_control_state = READY;     // TODO:
+                        next_control_state = SEND_CMD24;
             end
 
             //
@@ -280,8 +293,60 @@ module KFMMC_Controller #(
                         next_control_state = BUSY_WAIT_1;
             end
 
+            //
+            // Write block
+            //
+            SEND_CMD24: begin
+                if (busy)
+                    next_control_state = RESP_CMD24;
+            end
+            RESP_CMD24: begin
+                if ((~busy) || (error))
+                    next_control_state = SEND_START_DATA_BIT;
+            end
+            SEND_START_DATA_BIT: begin
+                if (busy)
+                    next_control_state = WAIT_TO_SEND_WRITE_DATA;
+            end
+            SEND_WRITE_DATA: begin
+                if (busy)
+                    next_control_state = WAIT_TO_SEND_WRITE_DATA;
+            end
+            WAIT_TO_SEND_WRITE_DATA: begin
+                if (~busy)
+                    if (access_count != 16'h0000)
+                        next_control_state = SEND_WRITE_DATA;
+                    else
+                        next_control_state = SEND_CRC_DATA;
+            end
+            SEND_CRC_DATA: begin
+                if (busy)
+                    next_control_state = WAIT_TO_SEND_CRC_DATA;
+            end
+            WAIT_TO_SEND_CRC_DATA: begin
+                if (~busy)
+                    if (send_crc_count != 1'b0)
+                        next_control_state = SEND_CRC_DATA;
+                    else
+                        next_control_state = START_TO_RESV_CRC_STATUS;
+            end
+            START_TO_RESV_CRC_STATUS: begin
+                if (busy)
+                    next_control_state = RECV_CRC_STATUS;
+            end
+            RECV_CRC_STATUS: begin
+                if ((~busy) || (error))
+                    next_control_state = COMPLETE_TO_WRITE;
+            end
+            COMPLETE_TO_WRITE: begin
+                if (read_data)
+                    if (write_interface_error)
+                        next_control_state = INIT;
+                    else
+                        next_control_state = BUSY_WAIT_1;
+            end
             default: begin
-                //next_control_state = INIT;
+                next_control_state = INIT;
             end
         endcase
     end
@@ -473,6 +538,66 @@ module KFMMC_Controller #(
             COMPLETE_TO_READ: begin
             end
 
+            //
+            // Write block
+            //
+            SEND_CMD24: begin
+                start_command           = 1'b1;
+                command[47:40]          = 8'h58;
+                if (ocr[30] == 1'b0)
+                    command[39:8]       = {block_address[22:0], 9'b000000000};
+                else
+                    command[39:8]       = block_address;
+                command[7:0]            = 8'h00;
+                enable_command_crc      = 1'b1;
+                enable_response_crc     = 1'b1;
+                response_length         = 5'd6;
+
+            end
+            RESP_CMD24: begin
+            end
+            SEND_START_DATA_BIT: begin
+                disable_data_io         = 1'b0;
+                start_data_io           = 1'b1;
+                check_data_start_bit    = 1'b0;
+                clear_data_crc          = 1'b0;
+                data_io                 = 1'b0;
+                transmit_data           = 8'hFE;
+            end
+            SEND_WRITE_DATA: begin
+                disable_data_io         = 1'b0;
+                start_data_io           = write_next_byte;
+                check_data_start_bit    = 1'b0;
+                clear_data_crc          = (access_count == access_block_size) ? 1'b1 : 1'b0;
+                data_io                 = 1'b0;
+                transmit_data           = write_data_buffer;
+            end
+            WAIT_TO_SEND_WRITE_DATA: begin
+                disable_data_io         = 1'b0;
+            end
+            SEND_CRC_DATA: begin
+                disable_data_io         = 1'b0;
+                start_data_io           = 1'b1;
+                check_data_start_bit    = 1'b0;
+                clear_data_crc          = 1'b0;
+                data_io                 = 1'b0;
+                transmit_data           = send_crc_count == 1'b1 ? write_data_crc[15:8] : write_data_crc[7:0];
+            end
+            WAIT_TO_SEND_CRC_DATA: begin
+                disable_data_io         = 1'b0;
+            end
+            START_TO_RESV_CRC_STATUS: begin
+                disable_data_io         = 1'b0;
+                start_data_io           = 1'b1;
+                check_data_start_bit    = 1'b1;
+                clear_data_crc          = 1'b0;
+                data_io                 = 1'b1;
+            end
+            RECV_CRC_STATUS: begin
+                disable_data_io         = 1'b0;
+            end
+            COMPLETE_TO_WRITE: begin
+            end
             default: begin
             end
         endcase
@@ -593,17 +718,94 @@ module KFMMC_Controller #(
             read_crc_error <= read_crc_error;
     end
 
+    // Request next write data
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            request_write_data_interrupt <= 1'b0;
+        else if ((write_next_byte) && (request_write_data_interrupt))
+            request_write_data_interrupt <= 1'b0;
+        else if ((control_state == SEND_WRITE_DATA) && (~write_next_byte))
+            request_write_data_interrupt <= 1'b1;
+        else
+            request_write_data_interrupt <= request_write_data_interrupt;
+    end
+
+    // Signal to set next write data
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            write_next_byte <= 1'b0;
+        else if (data_io_busy)
+            write_next_byte <= 1'b0;
+        else if ((write_data) && (request_write_data_interrupt))
+            write_next_byte <= 1'b1;
+        else
+            write_next_byte <= write_next_byte;
+    end
+
+    // Write data
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            write_data_buffer <= 8'h00;
+        else if (write_data)
+            write_data_buffer <= internal_data_bus;
+        else
+            write_data_buffer <= write_data_buffer;
+    end
+
+    // CRC
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            write_data_crc <= 16'h0000;
+        else if (control_state == WAIT_TO_SEND_WRITE_DATA)
+            write_data_crc <= send_data_crc;
+        else
+            write_data_crc <= write_data_crc;
+    end
+
+    // Send crc count
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            send_crc_count <= 1'b1;
+        else if (control_state == WAIT_TO_SEND_WRITE_DATA)
+            send_crc_count <= 1'b1;
+        else if ((control_state == WAIT_TO_SEND_CRC_DATA) && (~busy))
+            send_crc_count <= 1'b0;
+        else
+            send_crc_count <= send_crc_count;
+    end
+
+    // Complete to write
+    assign  write_completion_interrupt = (control_state == COMPLETE_TO_WRITE);
+
+    // Catch block write error
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            write_interface_error <= 1'b0;
+        else if (control_state == READY)
+            write_interface_error <= 1'b0;
+        else if ((control_state == RECV_CRC_STATUS) && (~busy))
+            if ((received_data[7:4] != 4'b0101) || (error))
+                write_interface_error <= 1'b1;
+            else
+                write_interface_error <= 1'b0;
+        else
+            write_interface_error <= write_interface_error;
+    end
+
     // access count
     wire    read_count_down = read_next_byte & data_io_busy;
+    wire    write_count_down = write_next_byte & data_io_busy;
 
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
             access_count <= 16'h0000;
-        else if (control_state == READY)
+        else if (control_state == SEND_CMD17)
             access_count <= access_block_size + 1;
+        else if (control_state == SEND_CMD24)
+            access_count <= access_block_size;
         else if ((control_state == READ_DATA_BLOCK) && (read_count_down))
             access_count <= access_count - 16'h0001;
-        else if (1'b0)  // TODO:Write Operation
+        else if ((control_state == SEND_WRITE_DATA) && (write_count_down))
             access_count <= access_count - 16'h0001;
         else
             access_count <= access_count;

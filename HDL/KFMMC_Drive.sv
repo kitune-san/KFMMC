@@ -28,10 +28,13 @@ module KFMMC_Drive #(
     // Error flags
     output  logic           read_interface_error,
     output  logic           read_crc_error,
+    output  logic           write_interface_error,
 
     // External input/output
     output  logic           block_read_interrupt,
     output  logic           read_completion_interrupt,
+    output  logic           request_write_data_interrupt,
+    output  logic           write_completion_interrupt,
 
     output  logic           mmc_clk,
     input   logic           mmc_cmd_in,
@@ -121,9 +124,12 @@ module KFMMC_Drive #(
 
         .read_interface_error                   (read_interface_error),
         .read_crc_error                         (read_crc_error),
+        .write_interface_error                  (write_interface_error),
 
         .block_read_interrupt                   (block_read_interrupt),
-        .read_completion_interrupt              (read_completion_interrupt)
+        .read_completion_interrupt              (read_completion_interrupt),
+        .request_write_data_interrupt           (request_write_data_interrupt),
+        .write_completion_interrupt             (write_completion_interrupt)
     );
 
 
