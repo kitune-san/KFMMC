@@ -264,6 +264,8 @@ module KFMMC_Controller #(
                 else if (~busy)
                     if (received_data[0] == 1'b1)
                         next_control_state = READY;
+                    else
+                        next_control_state = BUSY_WAIT_1;
             end
             READY: begin
                 if (write_access_command)
