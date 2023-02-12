@@ -53,6 +53,7 @@ module KFMMC_Controller #(
 
     // State
     output  logic           drive_busy,
+    output  logic   [39:0]  storage_size,
 
     // Error flags
     output  logic           read_interface_error,
@@ -855,6 +856,18 @@ module KFMMC_Controller #(
             csd <= response[127:0];
         else
             csd <= csd;
+    end
+
+    // Storage size
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset)
+            storage_size <= 0;
+        else if (csd[127:126] == 2'b00) // V1
+            storage_size <= (csd[73:62]  + 40'd1) << (csd[49:47] + csd[83:80] + 5'd2);
+        else if (csd[127:126] == 2'b01) // V2
+            storage_size <= {(csd[69:48] + 22'd1), 19'b0000000000000000000};
+        else                            // other
+            storage_size <= 0;
     end
 
     // Block Address

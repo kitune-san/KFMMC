@@ -24,6 +24,7 @@ module KFMMC_Drive #(
 
     // State
     output  logic           drive_busy,
+    output  logic   [39:0]  storage_size,
 
     // Error flags
     output  logic           read_interface_error,
@@ -121,6 +122,7 @@ module KFMMC_Drive #(
         .timeout_interrupt                      (timeout_interrupt),
 
         .drive_busy                             (drive_busy),
+        .storage_size                           (storage_size),
 
         .read_interface_error                   (read_interface_error),
         .read_crc_error                         (read_crc_error),
