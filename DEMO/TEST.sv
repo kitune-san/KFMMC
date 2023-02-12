@@ -9,6 +9,12 @@ module TOP (
 
     // Output
     output  logic   [9:0]   LED,
+    output  logic   [6:0]   HEX0,
+    output  logic   [6:0]   HEX1,
+    output  logic   [6:0]   HEX2,
+    output  logic   [6:0]   HEX3,
+    output  logic   [6:0]   HEX4,
+    output  logic   [6:0]   HEX5,
 
     // MMC
     output  logic           MMC_CLK,
@@ -72,12 +78,16 @@ module TOP (
     logic           read_data;
 
     logic           drive_busy;
+    logic   [39:0]  storage_size;
 
     logic           read_interface_error;
     logic           read_crc_error;
+    logic           write_interface_error;
 
     logic           block_read_interrupt;
     logic           read_completion_interrupt;
+    logic           request_write_data_interrupt;
+    logic           write_completion_interrupt;
 
     logic           mmc_clk;
     logic           mmc_cmd_in;
@@ -331,6 +341,37 @@ module TOP (
     assign  LED[7]  = read_interface_error;
     assign  LED[8]  = read_crc_error;
     assign  LED[9]  = drive_busy;
+
+    function [6:0] CONV7SEG (input logic [3:0] data);
+    begin
+        case (data)
+            4'h0:    CONV7SEG = 7'b1000000;
+            4'h1:    CONV7SEG = 7'b1111001;
+            4'h2:    CONV7SEG = 7'b0100100;
+            4'h3:    CONV7SEG = 7'b0110000;
+            4'h4:    CONV7SEG = 7'b0011001;
+            4'h5:    CONV7SEG = 7'b0010010;
+            4'h6:    CONV7SEG = 7'b0000010;
+            4'h7:    CONV7SEG = 7'b1011000;
+            4'h8:    CONV7SEG = 7'b0000000;
+            4'h9:    CONV7SEG = 7'b0010000;
+            4'ha:    CONV7SEG = 7'b0001000;
+            4'hb:    CONV7SEG = 7'b0000011;
+            4'hc:    CONV7SEG = 7'b1000110;
+            4'hd:    CONV7SEG = 7'b0100001;
+            4'he:    CONV7SEG = 7'b0000110;
+            4'hf:    CONV7SEG = 7'b0001110;
+            default: CONV7SEG = 7'b1111111;
+        endcase
+    end
+    endfunction
+
+    assign  HEX0    = CONV7SEG(storage_size[19:16]);
+    assign  HEX1    = CONV7SEG(storage_size[23:20]);
+    assign  HEX2    = CONV7SEG(storage_size[27:24]);
+    assign  HEX3    = CONV7SEG(storage_size[31:28]);
+    assign  HEX4    = CONV7SEG(storage_size[35:32]);
+    assign  HEX5    = CONV7SEG(storage_size[39:36]);
 
 endmodule
 
