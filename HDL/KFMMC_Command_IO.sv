@@ -35,7 +35,7 @@ module KFMMC_Command_IO (
     input   logic           sent_command_interrupt_from_mmc,
     input   logic           received_response_interrupt_from_mmc
 );
-    `define SEND_COMMAND_LENGTH (3'd6)
+    `define SEND_COMMAND_LENGTH (3'd7)
 
     // State
     typedef enum {IDLE, SEND_COMMAND, RECV_RESPONSE} command_state_t;
@@ -45,7 +45,7 @@ module KFMMC_Command_IO (
     //
     command_state_t command_state;
     command_state_t next_command_state;
-    logic   [39:0]  command_buffer;
+    logic   [47:0]  command_buffer;
     logic   [2:0]   send_count;
     logic   [4:0]   recv_count;
     logic           enable_command_crc_ff;
@@ -113,7 +113,7 @@ module KFMMC_Command_IO (
                 start_communication_to_mmc      <= 1'b1;
                 command_io_to_mmc               <= 1'b0;
                 check_command_start_bit_to_mmc  <= 1'b0;
-                clear_command_crc_to_mmc        <= 1'b0;
+                clear_command_crc_to_mmc        <= (send_count == (`SEND_COMMAND_LENGTH-1)) ? 1'b1 : 1'b0;
                 clear_command_interrupt_to_mmc  <= 1'b1;
                 mask_command_interrupt_to_mmc   <= 1'b0;
                 set_send_command_to_mmc         <= 1'b1;
@@ -202,20 +202,20 @@ module KFMMC_Command_IO (
     //
     always_ff @(negedge clock, posedge reset) begin
         if (reset) begin
-            command_buffer <= 40'hFFFFFFFFFF;
+            command_buffer <= 48'hFFFFFFFFFFFF;
             send_command_to_mmc <= 8'hFF;
         end
         else if ((start_command) && (command_state == IDLE)) begin
-            command_buffer <= command[39:0];
-            send_command_to_mmc <= command[47:40];
+            command_buffer <= command;
+            send_command_to_mmc <= 8'hFF;
         end
         else if ((enable_command_crc_ff) && (send_count == 3'd1)) begin
             command_buffer <= command_buffer;
             send_command_to_mmc <= {send_command_crc_from_mmc, 1'b1};
         end
         else if (shift_send_command_data) begin
-                command_buffer <= {command_buffer[31:0], 8'hFF};
-                send_command_to_mmc <= command_buffer[39:32];
+                command_buffer <= {command_buffer[39:0], 8'hFF};
+                send_command_to_mmc <= command_buffer[47:40];
         end
         else begin
             command_buffer <= command_buffer;
