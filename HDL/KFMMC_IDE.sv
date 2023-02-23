@@ -128,7 +128,6 @@ module KFMMC_IDE #(
             prev_read_n         <= 1'b1;
             prev_write_n        <= 1'b1;
             read_edge           <= 1'b0;
-            write_edge          <= 1'b0;
             command_cs          <= 1'b0;
             control_cs          <= 1'b0;
         end
@@ -138,13 +137,14 @@ module KFMMC_IDE #(
             prev_read_n         <= ide_io_read_n;
             prev_write_n        <= ide_io_write_n;
             read_edge           <=  prev_read_n  & ~ide_io_read_n;
-            write_edge          <= ~prev_write_n &  ide_io_write_n;
             command_cs          <= ~ide_cs1fx_n;
             control_cs          <= ~ide_cs3fx_n;
         end
     end
 
+    assign  write_edge          = ~prev_write_n &  ide_io_write_n;
     assign  write_command       = command_cs & write_edge;
+    assign  write_control       = control_cs & write_edge;
 
 
     //
@@ -152,102 +152,102 @@ module KFMMC_IDE #(
     //
     wire    [31:0]  storage_total_sectors   = {1'b0, mmc_storage_size[39:9]};
 
-    logic           calc_storage_chs;
-    wire            end_of_storage_chs_calc = 1'b1;
-    wire    [15:0]  storage_cylinder        = 16'h3FF;
-    wire    [3:0]   storage_head            = 4'hF;
-    wire    [7:0]   storage_spt             = 8'h3F;
-//    typedef enum {CALC_STORAGE_CHS_IDLE, CALC_STORAGE_CHS_1, CALC_STORAGE_CHS_2, CALC_STORAGE_CHS_END} calc_storage_chs_state_t;
-//    calc_storage_chs_state_t    calc_storage_chs_state;
 //    logic           calc_storage_chs;
-//    logic           end_of_storage_chs_calc;
-//    logic   [15:0]  calc_storage_head_x_spt;
-//    logic   [31:0]  calc_storage_temp;
-//
-//    logic   [15:0]  storage_cylinder;   // 65535-0  (BIOS: 1023-0)
-//    logic   [3:0]   storage_head;       // 15-0     (BIOS: 254-0)
-//    logic   [7:0]   storage_spt;        // 255-1    (BIOS: 63-1)
-//
-//    always_ff @(negedge clock, posedge reset) begin
-//        if (reset) begin
-//            calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
-//            calc_storage_head_x_spt <= 16'h0000;
-//            calc_storage_temp       <= 31'h00000000;
-//            storage_cylinder        <= 16'h0000;
-//            storage_head            <= 4'h0;
-//            storage_spt             <= 8'h00;
-//        end
-//        else if (~calc_storage_chs) begin
-//            calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
-//            calc_storage_head_x_spt <= calc_storage_head_x_spt;
-//            calc_storage_temp       <= calc_storage_temp;
-//            storage_cylinder        <= storage_cylinder;
-//            storage_head            <= storage_head;
-//            storage_spt             <= storage_spt;
-//        end
-//        else begin
-//            casez (calc_storage_chs_state)
-//                CALC_STORAGE_CHS_IDLE: begin
-//                    calc_storage_head_x_spt <= 16'h00FC;
-//                    calc_storage_temp       <= storage_total_sectors;
-//                    storage_cylinder        <= 16'h0000;
-//                    storage_head            <= 4'h4;
-//                    storage_spt             <= 8'h3F;
-//                    calc_storage_chs_state  <= CALC_STORAGE_CHS_1;
-//                end
-//                CALC_STORAGE_CHS_1: begin
-//                    calc_storage_head_x_spt <= calc_storage_head_x_spt;
-//                    storage_head            <= storage_head;
-//                    storage_spt             <= storage_spt;
-//                    if ((~|calc_storage_temp) || (calc_storage_temp < calc_storage_head_x_spt)) begin
-//                        calc_storage_temp       <= calc_storage_temp;
-//                        storage_cylinder        <= storage_cylinder;
-//                        calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
-//                    end
-//                    else if (storage_cylinder >= 16'h3FF) begin
-//                        calc_storage_temp       <= calc_storage_temp;
-//                        storage_cylinder        <= storage_cylinder;
-//                        calc_storage_chs_state  <= CALC_STORAGE_CHS_2;
-//                    end
-//                    else begin
-//                        calc_storage_temp       <= calc_storage_temp - calc_storage_head_x_spt;
-//                        storage_cylinder        <= storage_cylinder + 1'b1;
-//                    end
-//                end
-//                CALC_STORAGE_CHS_2: begin
-//                    if (storage_head == 4'hF) begin
-//                        calc_storage_head_x_spt <= calc_storage_head_x_spt;
-//                        calc_storage_temp       <= calc_storage_temp;
-//                        storage_cylinder        <= 16'h3FF;
-//                        storage_head            <= storage_head;
-//                        storage_spt             <= storage_spt;
-//                        calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
-//                    end
-//                    else begin
-//                        calc_storage_head_x_spt <= calc_storage_head_x_spt + storage_spt;
-//                        calc_storage_temp       <= storage_total_sectors;
-//                        storage_cylinder        <= 16'h0000;
-//                        storage_head            <= storage_head + 1'b1;
-//                        storage_spt             <= storage_spt;
-//                        calc_storage_chs_state  <= CALC_STORAGE_CHS_1;
-//                    end
-//                end
-//                CALC_STORAGE_CHS_END: begin
-//                    calc_storage_head_x_spt <= calc_storage_head_x_spt;
-//                    calc_storage_temp       <= calc_storage_temp;
-//                    storage_cylinder        <= storage_cylinder;
-//                    storage_head            <= storage_head;
-//                    storage_spt             <= storage_spt;
-//                    calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
-//                end
-//                default: begin
-//                    calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
-//                end
-//            endcase
-//        end
-//    end
-//
-//    assign  end_of_storage_chs_calc = (calc_storage_chs_state == CALC_STORAGE_CHS_END);
+//    wire            end_of_storage_chs_calc = 1'b1;
+//    wire    [15:0]  storage_cylinder        = 16'h3FF;
+//    wire    [3:0]   storage_head            = 4'hF;
+//    wire    [7:0]   storage_spt             = 8'h3F;
+    typedef enum {CALC_STORAGE_CHS_IDLE, CALC_STORAGE_CHS_1, CALC_STORAGE_CHS_2, CALC_STORAGE_CHS_END} calc_storage_chs_state_t;
+    calc_storage_chs_state_t    calc_storage_chs_state;
+    logic           calc_storage_chs;
+    logic           end_of_storage_chs_calc;
+    logic   [15:0]  calc_storage_head_x_spt;
+    logic   [31:0]  calc_storage_temp;
+
+    logic   [15:0]  storage_cylinder;   // 65535-0  (BIOS: 1023-0)
+    logic   [3:0]   storage_head;       // 15-0     (BIOS: 254-0)
+    logic   [7:0]   storage_spt;        // 255-1    (BIOS: 63-1)
+
+    always_ff @(negedge clock, posedge reset) begin
+        if (reset) begin
+            calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
+            calc_storage_head_x_spt <= 16'h0000;
+            calc_storage_temp       <= 31'h00000000;
+            storage_cylinder        <= 16'h0000;
+            storage_head            <= 4'h0;
+            storage_spt             <= 8'h00;
+        end
+        else if (~calc_storage_chs) begin
+            calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
+            calc_storage_head_x_spt <= calc_storage_head_x_spt;
+            calc_storage_temp       <= calc_storage_temp;
+            storage_cylinder        <= storage_cylinder;
+            storage_head            <= storage_head;
+            storage_spt             <= storage_spt;
+        end
+        else begin
+            casez (calc_storage_chs_state)
+                CALC_STORAGE_CHS_IDLE: begin
+                    calc_storage_head_x_spt <= 16'h00FC;
+                    calc_storage_temp       <= storage_total_sectors;
+                    storage_cylinder        <= 16'h0000;
+                    storage_head            <= 4'h4;
+                    storage_spt             <= 8'h3F;
+                    calc_storage_chs_state  <= CALC_STORAGE_CHS_1;
+                end
+                CALC_STORAGE_CHS_1: begin
+                    calc_storage_head_x_spt <= calc_storage_head_x_spt;
+                    storage_head            <= storage_head;
+                    storage_spt             <= storage_spt;
+                    if ((~|calc_storage_temp) || (calc_storage_temp < calc_storage_head_x_spt)) begin
+                        calc_storage_temp       <= calc_storage_temp;
+                        storage_cylinder        <= storage_cylinder;
+                        calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
+                    end
+                    else if (storage_cylinder >= 16'h3FFF) begin
+                        calc_storage_temp       <= calc_storage_temp;
+                        storage_cylinder        <= storage_cylinder;
+                        calc_storage_chs_state  <= CALC_STORAGE_CHS_2;
+                    end
+                    else begin
+                        calc_storage_temp       <= calc_storage_temp - calc_storage_head_x_spt;
+                        storage_cylinder        <= storage_cylinder + 1'b1;
+                    end
+                end
+                CALC_STORAGE_CHS_2: begin
+                    if (storage_head == 4'hF) begin
+                        calc_storage_head_x_spt <= calc_storage_head_x_spt;
+                        calc_storage_temp       <= calc_storage_temp;
+                        storage_cylinder        <= 16'h3FFF;
+                        storage_head            <= storage_head;
+                        storage_spt             <= storage_spt;
+                        calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
+                    end
+                    else begin
+                        calc_storage_head_x_spt <= calc_storage_head_x_spt + storage_spt;
+                        calc_storage_temp       <= storage_total_sectors;
+                        storage_cylinder        <= 16'h0000;
+                        storage_head            <= storage_head + 1'b1;
+                        storage_spt             <= storage_spt;
+                        calc_storage_chs_state  <= CALC_STORAGE_CHS_1;
+                    end
+                end
+                CALC_STORAGE_CHS_END: begin
+                    calc_storage_head_x_spt <= calc_storage_head_x_spt;
+                    calc_storage_temp       <= calc_storage_temp;
+                    storage_cylinder        <= storage_cylinder;
+                    storage_head            <= storage_head;
+                    storage_spt             <= storage_spt;
+                    calc_storage_chs_state  <= CALC_STORAGE_CHS_END;
+                end
+                default: begin
+                    calc_storage_chs_state  <= CALC_STORAGE_CHS_IDLE;
+                end
+            endcase
+        end
+    end
+
+    assign  end_of_storage_chs_calc = (calc_storage_chs_state == CALC_STORAGE_CHS_END);
 
 
     //
@@ -265,7 +265,7 @@ module KFMMC_IDE #(
     logic   [3:0]   calc_lc_head_count;
     logic   [9:0]   calc_lc_temp;
     logic   [31:0]  calc_lc_temp_2;
-    logic   [16:0]  result_calc_logical_cylinder;
+    logic   [15:0]  result_calc_logical_cylinder;
     // total_cylinder = LBA / spt * total_headers
     always_ff @(negedge clock, posedge reset) begin
         if (reset) begin
@@ -479,8 +479,7 @@ module KFMMC_IDE #(
     wire    [7:0]   status  = {busy, device_ready, 2'b00, data_request, 2'b00, error_flag};
 
     // error
-    logic           abort;
-    wire    [7:0]   error   = {5'b00000, abort, 2'b00};
+    logic   [7:0]   error;
 
     logic   [7:0]   features;
     logic   [15:0]  sector_count;
@@ -497,30 +496,51 @@ module KFMMC_IDE #(
     //
     // Identify
     //
-    logic   [15:0]  identify[255:0];
+    logic   [15:0]  identify[256:0];
+    logic   [9:0]   identify_index;
+    wire    [15:0]  identify_out    = identify[identify_index[8:1]];
 
 
     //
     // Command Control
     //
     typedef enum {RESET, WAIT_TO_RESET, CALC_STORAGE_CHS, IDLE, EXEC_COMMAND,
-                    CMD_DEVICE_RESET } state_t;
+                    CMD_DEVICE_RESET,
+                    CMD_EXE_DEVICE_DIAG,
+                    CMD_IDENTIFY_DEVICE_1, CMD_IDENTIFY_DEVICE_2,
+                    CMD_INIT_DEVICE_PARAM,
+                    CMD_READ_1,
+                    CMD_WRITE_1,
+                    CMD_SEEK,
+                    CMD_NO_SUPPORT,
+                    TRANS_SECTOR_1, TRANS_SECTOR_2, TRANS_SECTOR_3, TRANS_SECTOR_4, TRANS_SECTOR_5
+                } state_t;
     state_t state;
     logic   [7:0]   command;
+    logic   [10:0]  trans_fifo_index;
 
     always_ff @(negedge clock, posedge reset) begin
         if (reset) begin
-            mmc_reset                   <= 1'b0;
             state                       <= RESET;
+            mmc_reset                   <= 1'b0;
+            // registers
             busy                        <= 1'b1;
             device_ready                <= 1'b0;
             data_request                <= 1'b0;
             error_flag                  <= 1'b0;
+            error                       <= 8'h01;
+            // geometory
             calc_storage_chs            <= 1'b0;
             logical_cylinder            <= 16'h03FF;
             logical_head                <= 4'hF;
             logical_spt                 <= 8'h3F;
             command                     <= 8'h00;
+            // fifo
+            fifo_in                     <= 1'b00;
+            shift_fifo                  <= 1'b0;
+            // commands
+            identify_index              <= 10'h000;
+            // mmc
             mmc_internal_data_bus       <= 8'hFF;
             mmc_write_block_address_1   <= 1'b0;
             mmc_write_block_address_2   <= 1'b0;
@@ -529,6 +549,9 @@ module KFMMC_IDE #(
             mmc_write_access_command    <= 1'b0;    // internal_data_bus = 8'h80 is read / = 8'h81 is write
             mmc_write_data              <= 1'b0;
             mmc_read_data               <= 1'b0;
+        end
+        else if ((write_control) && (latch_address == 3'b110) && (latch_data[2] == 1'b1)) begin
+            mmc_reset                   <= 1'b1;
         end
         else if (mmc_reset) begin
             mmc_reset                   <= 1'b0;
@@ -539,16 +562,15 @@ module KFMMC_IDE #(
         else begin
             casez (state)
                 RESET: begin
-                    if (mmc_drive_busy)
-                        state   <= WAIT_TO_RESET;
+                    state                       <= WAIT_TO_RESET;
+                    mmc_reset                   <= 1'b0;
+                    // registers
                     busy                        <= 1'b1;
                     device_ready                <= 1'b0;
                     data_request                <= 1'b0;
                     error_flag                  <= 1'b0;
-                    calc_storage_chs            <= 1'b0;
-                    logical_cylinder            <= 16'h03FF;
-                    logical_head                <= 4'hF;
-                    logical_spt                 <= 8'h3F;
+                    error                       <= 8'h01;
+                    // mmc
                     command                     <= 8'h00;
                     mmc_internal_data_bus       <= 8'hFF;
                     mmc_write_block_address_1   <= 1'b0;
@@ -562,7 +584,7 @@ module KFMMC_IDE #(
 
                 WAIT_TO_RESET: begin
                     if (~mmc_drive_busy)
-                        state   <= CALC_STORAGE_CHS;
+                        state                   <= CALC_STORAGE_CHS;
                 end
 
                 CALC_STORAGE_CHS: begin
@@ -578,7 +600,7 @@ module KFMMC_IDE #(
                 end
 
                 IDLE: begin
-                    if ((~write_command) || (latch_address == 3'b111) || (~device_master != select_drive)) begin
+                    if ((~write_command) || (latch_address != 3'b111) || (~device_master != select_drive)) begin
                         // Wait Command
                         busy                    <= 1'b0;
                         device_ready            <= 1'b1;
@@ -593,17 +615,125 @@ module KFMMC_IDE #(
 
                 EXEC_COMMAND: begin
                     casez (command)
-                        8'h08: state        <= CMD_DEVICE_RESET;    // DEVICE_RESET
-                        8'h90: // EXECUTE DEVICE DIAGNOSTIC
-                        8'hEC: // IDENTIFY DEVICE
-                        8'hEF: // SET FEATURES
-                        default:
+                        8'h08: state            <= CMD_DEVICE_RESET;        // DEVICE_RESET
+                        8'h90: state            <= CMD_EXE_DEVICE_DIAG;     // EXECUTE DEVICE DIAGNOSTIC
+                        8'hEC: state            <= CMD_IDENTIFY_DEVICE_1;   // IDENTIFY DEVICE
+                        8'hEF: state            <= CMD_NO_SUPPORT;          // SET FEATURES
+                        8'h91: state            <= CMD_INIT_DEVICE_PARAM;   // INITIALIZE DEVICE PARAMETERS
+                        8'h20: state            <= CMD_READ_1;              // READ SECTOR(S)
+                        8'h21: state            <= CMD_READ_1;              // READ SECTOR(S) with retry
+                        8'h30: state            <= CMD_WRITE_1;             // WRITE SECTOR(S)
+                        8'h31: state            <= CMD_WRITE_1;             // WRITE SECTOR(S) with retry
+                        8'h40: state            <= CMD_READ_1;              // READ VERIFY SECTOR(S)
+                        8'h41: state            <= CMD_READ_1;              // READ VERIFY SECTOR(S) with retry
+                        8'h70: state            <= CMD_SEEK;                // SEEK
+                        default: state          <= CMD_NO_SUPPORT;
                     endcase
                 end
 
                 CMD_DEVICE_RESET: begin
-                        mmc_reset               <= 1'b1;
-                        state                   <= WAIT_TO_RESET;
+                    mmc_reset                   <= 1'b1;
+                    state                       <= WAIT_TO_RESET;
+                end
+
+                CMD_EXE_DEVICE_DIAG: begin
+                    mmc_reset                   <= 1'b1;
+                    state                       <= WAIT_TO_RESET;
+                end
+
+                CMD_IDENTIFY_DEVICE_1: begin
+                    identify_index              <= 10'h000;
+                    state                       <= CMD_IDENTIFY_DEVICE_2;
+                end
+
+                CMD_IDENTIFY_DEVICE_2: begin
+                    if (identify_index < access_block_size) begin
+                        identify_index          <= identify_index + 1'b1;
+                        fifo_in                 <= ~identify_index[0] ? identify_out[15:8] : identify_out[7:0];
+                        shift_fifo              <= 1'b1;
+                    end
+                    else begin
+                        fifo_in                 <= 8'h00;
+                        shift_fifo              <= 1'b0;
+                        state                   <= TRANS_SECTOR_1;
+                    end
+                end
+
+                CMD_INIT_DEVICE_PARAM: begin
+                    logical_head                <= head_number;
+                    logical_spt                 <= sector_count[7:0];
+                    logical_cylinder            <= result_calc_logical_cylinder;
+
+                    if (~end_logical_cylinder) begin
+                        start_logical_cylinder  <= 1'b1;
+                    end
+                    else begin
+                        start_logical_cylinder  <= 1'b0;
+                        state                   <= IDLE;
+                    end
+                end
+
+                CMD_READ_1: begin
+                    // TODO:
+                   error_flag                   <= 1'b1;
+                   error                        <= 8'b00000100;
+                   state                        <= IDLE;
+                end
+
+                CMD_WRITE_1: begin
+                    // TODO:
+                   error_flag                   <= 1'b1;
+                   error                        <= 8'b00000100;
+                   state                        <= IDLE;
+                end
+
+                CMD_SEEK: begin
+                    // TODO:
+                    error_flag                  <= 1'b1;
+                    error                       <= 8'b00000100;
+                    state                       <= IDLE;
+                end
+
+                CMD_NO_SUPPORT: begin
+                    error_flag                  <= 1'b1;
+                    error                       <= 8'b00000100;
+                    state                       <= IDLE;
+                end
+
+
+                TRANS_SECTOR_1: begin
+                    trans_fifo_index            <= access_block_size;
+                    state                       <= TRANS_SECTOR_2;
+                end
+
+                TRANS_SECTOR_2: begin
+                    busy                        <= 1'b0;
+                    data_request                <= 1'b1;
+
+                    if ((read_edge) && (command_cs) && (ide_address == 3'b000)) begin
+                        shift_fifo              <= 1'b1;
+                        state                   <= TRANS_SECTOR_3;
+                    end
+                end
+
+                TRANS_SECTOR_3: begin
+                    trans_fifo_index            <= {(trans_fifo_index[10:1] - 1'b1), 1'b0};
+                    shift_fifo                  <= 1'b1;
+                    state                       <= TRANS_SECTOR_4;
+                end
+
+                TRANS_SECTOR_4: begin
+                    shift_fifo                  <= 1'b0;
+
+                    if (|trans_fifo_index) begin
+                        state                   <= TRANS_SECTOR_2;
+                    end
+                    else begin
+                        busy                    <= 1'b1;
+                        data_request            <= 1'b0;
+                        // TODO:
+                        state                   <= IDLE;
+                    end
                 end
 
                 default: begin
@@ -664,9 +794,9 @@ module KFMMC_IDE #(
     //
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
-            cylinder            <= 32'hFFFFFFFF;
+            cylinder            <= 32'h00000000;
         else if (mmc_reset)
-            cylinder            <= 32'hFFFFFFFF;
+            cylinder            <= 32'h00000000;
         else if (write_command && (latch_address == 3'b100))
             cylinder            <= {cylinder[31:24], cylinder[7:0],   cylinder[15:8],  latch_data[7:0]};
         else if (write_command && (latch_address == 3'b101))
@@ -747,7 +877,7 @@ module KFMMC_IDE #(
                 1'b0:   // Status Register
                     ide_data_bus_out <= {8'h00, status};
                 1'b1:   // Drive Address Register
-                    ide_data_bus_out <= 8'hFF;   // TODO:
+                    ide_data_bus_out <= {1'b0, 1'b1, head_number, ~select_drive, select_drive};
                 default:
                     ide_data_bus_out <= 16'hFFFF;
             endcase
