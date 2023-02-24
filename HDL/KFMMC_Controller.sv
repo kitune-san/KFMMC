@@ -11,7 +11,7 @@ module KFMMC_Controller #(
     input   logic           reset,
 
     // Internal bus
-    input   logic   [7:0]   internal_data_bus,
+    input   logic   [7:0]   data_bus,
     input   logic           write_block_address_1,
     input   logic           write_block_address_2,
     input   logic           write_block_address_3,
@@ -61,7 +61,7 @@ module KFMMC_Controller #(
     output  logic           write_interface_error,
 
     // External input/output
-    output  logic           block_read_interrupt,
+    output  logic           read_byte_interrupt,
     output  logic           read_completion_interrupt,
     output  logic           request_write_data_interrupt,
     output  logic           write_completion_interrupt
@@ -270,9 +270,9 @@ module KFMMC_Controller #(
             end
             READY: begin
                 if (write_access_command)
-                    if (internal_data_bus == 8'b10000000)       // Read command
+                    if (data_bus == 8'b10000000)       // Read command
                         next_control_state = SEND_CMD17;
-                    else if (internal_data_bus == 8'b10000001)  // Write command
+                    else if (data_bus == 8'b10000001)  // Write command
                         next_control_state = SEND_CMD24;
             end
 
@@ -670,14 +670,14 @@ module KFMMC_Controller #(
     // Interrupt to read data
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
-            block_read_interrupt <= 1'b0;
-        else if ((read_data) && (block_read_interrupt))
-            block_read_interrupt <= 1'b0;
+            read_byte_interrupt <= 1'b0;
+        else if ((read_data) && (read_byte_interrupt))
+            read_byte_interrupt <= 1'b0;
         else if ((control_state == READ_DATA_BLOCK)
             && (~data_io_busy) && (~read_next_byte) && (~reading_crc_byte))
-            block_read_interrupt <= 1'b1;
+            read_byte_interrupt <= 1'b1;
         else
-            block_read_interrupt <= block_read_interrupt;
+            read_byte_interrupt <= read_byte_interrupt;
     end
 
     // Signal to read next data
@@ -686,7 +686,7 @@ module KFMMC_Controller #(
             read_next_byte <= 1'b0;
         else if (data_io_busy)
             read_next_byte <= 1'b0;
-        else if ((read_data) && (block_read_interrupt))
+        else if ((read_data) && (read_byte_interrupt))
             read_next_byte <= 1'b1;
         else if (reading_crc_byte)
             read_next_byte <= 1'b1;
@@ -750,7 +750,7 @@ module KFMMC_Controller #(
         if (reset)
             write_data_buffer <= 8'h00;
         else if (write_data)
-            write_data_buffer <= internal_data_bus;
+            write_data_buffer <= data_bus;
         else
             write_data_buffer <= write_data_buffer;
     end
@@ -875,13 +875,13 @@ module KFMMC_Controller #(
         if (reset)
             block_address <= 32'h00000000;
         else if (write_block_address_1)
-            block_address <= {block_address[31:8],  internal_data_bus};
+            block_address <= {block_address[31:8],  data_bus};
         else if (write_block_address_2)
-            block_address <= {block_address[31:16], internal_data_bus, block_address[7:0]};
+            block_address <= {block_address[31:16], data_bus, block_address[7:0]};
         else if (write_block_address_3)
-            block_address <= {block_address[31:24], internal_data_bus, block_address[15:0]};
+            block_address <= {block_address[31:24], data_bus, block_address[15:0]};
         else if (write_block_address_4)
-            block_address <= {internal_data_bus, block_address[23:0]};
+            block_address <= {data_bus, block_address[23:0]};
         else
             block_address <= block_address;
     end

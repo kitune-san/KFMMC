@@ -11,7 +11,7 @@ module KFMMC_Drive #(
     input   logic           reset,
 
     // Internal bus
-    input   logic   [7:0]   internal_data_bus,
+    input   logic   [7:0]   data_bus,
     input   logic           write_block_address_1,
     input   logic           write_block_address_2,
     input   logic           write_block_address_3,
@@ -32,7 +32,7 @@ module KFMMC_Drive #(
     output  logic           write_interface_error,
 
     // External input/output
-    output  logic           block_read_interrupt,
+    output  logic           read_byte_interrupt,
     output  logic           read_completion_interrupt,
     output  logic           request_write_data_interrupt,
     output  logic           write_completion_interrupt,
@@ -84,7 +84,7 @@ module KFMMC_Drive #(
         .clock                                  (clock),
         .reset                                  (reset),
 
-        .internal_data_bus                      (internal_data_bus),
+        .data_bus                               (data_bus),
         .write_block_address_1                  (write_block_address_1),
         .write_block_address_2                  (write_block_address_2),
         .write_block_address_3                  (write_block_address_3),
@@ -128,7 +128,7 @@ module KFMMC_Drive #(
         .read_crc_error                         (read_crc_error),
         .write_interface_error                  (write_interface_error),
 
-        .block_read_interrupt                   (block_read_interrupt),
+        .read_byte_interrupt                    (read_byte_interrupt),
         .read_completion_interrupt              (read_completion_interrupt),
         .request_write_data_interrupt           (request_write_data_interrupt),
         .write_completion_interrupt             (write_completion_interrupt)
