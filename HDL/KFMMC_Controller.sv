@@ -12,10 +12,12 @@ module KFMMC_Controller #(
 
     // Internal bus
     input   logic   [7:0]   data_bus,
+    input   logic   [24:0]  data_bus_extension,
     input   logic           write_block_address_1,
     input   logic           write_block_address_2,
     input   logic           write_block_address_3,
     input   logic           write_block_address_4,
+    input   logic           write_block_address_extension,
     input   logic           write_access_command,
     input   logic           write_data,
 
@@ -874,6 +876,8 @@ module KFMMC_Controller #(
     always_ff @(negedge clock, posedge reset) begin
         if (reset)
             block_address <= 32'h00000000;
+        else if (write_block_address_extension)
+            block_address <= {data_bus_extension, data_bus};
         else if (write_block_address_1)
             block_address <= {block_address[31:8],  data_bus};
         else if (write_block_address_2)

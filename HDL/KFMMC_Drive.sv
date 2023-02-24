@@ -12,10 +12,12 @@ module KFMMC_Drive #(
 
     // Internal bus
     input   logic   [7:0]   data_bus,
+    input   logic   [24:0]  data_bus_extension,
     input   logic           write_block_address_1,
     input   logic           write_block_address_2,
     input   logic           write_block_address_3,
     input   logic           write_block_address_4,
+    input   logic           write_block_address_extension,
     input   logic           write_access_command,
     input   logic           write_data,
 
@@ -85,10 +87,12 @@ module KFMMC_Drive #(
         .reset                                  (reset),
 
         .data_bus                               (data_bus),
+        .data_bus_extension                     (data_bus_extension),
         .write_block_address_1                  (write_block_address_1),
         .write_block_address_2                  (write_block_address_2),
         .write_block_address_3                  (write_block_address_3),
         .write_block_address_4                  (write_block_address_4),
+        .write_block_address_extension          (write_block_address_extension),
         .write_access_command                   (write_access_command),
         .write_data                             (write_data),
         .read_data_byte                         (read_data_byte),
