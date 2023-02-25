@@ -132,8 +132,14 @@ module KFMMC_IDE #(
             control_cs          <= 1'b0;
         end
         else begin
-            latch_address       <= ide_address;
-            latch_data          <= ide_data_bus_in;
+            if (~ide_cs1fx_n | ~ide_cs3fx_n) begin
+                latch_address   <= ide_address;
+                latch_data      <= ide_data_bus_in;
+            end
+            else begin
+                latch_address   <= latch_address;
+                latch_data      <= latch_data;
+            end
             prev_read_n         <= ide_io_read_n;
             prev_write_n        <= ide_io_write_n;
             read_edge           <=  prev_read_n  & ~ide_io_read_n;
@@ -509,10 +515,11 @@ module KFMMC_IDE #(
                     CMD_EXE_DEVICE_DIAG,
                     CMD_IDENTIFY_DEVICE_1, CMD_IDENTIFY_DEVICE_2,
                     CMD_INIT_DEVICE_PARAM,
-                    CMD_READ_1, CMD_READ_2, CMD_READ_3, CMD_READ_4, CMD_READ_5, CMD_READ_6, 
-                    CMD_WRITE_1,
+                    CMD_READ_1, CMD_READ_2, CMD_READ_3, CMD_READ_4, CMD_READ_5, CMD_READ_6,
+                    CMD_WRITE_1, CMD_WRITE_2, CMD_WRITE_3, CMD_WRITE_4, CMD_WRITE_5, CMD_WRITE_6, CMD_WRITE_7, CMD_WRITE_8,
                     CMD_SEEK,
                     CMD_NO_SUPPORT,
+                    SET_BLOCK_ADDRESS,
                     TRANS_SECTOR_1, TRANS_SECTOR_2, TRANS_SECTOR_3, TRANS_SECTOR_4, TRANS_SECTOR_5
                 } state_t;
     state_t state;
@@ -688,24 +695,8 @@ module KFMMC_IDE #(
 
                 // Set sector count and calculate LBA
                 CMD_READ_1: begin
-                    // Set sector count (256-1)
-                    remaining_sector_count      <= {(sector_count[7:0] == 8'h000 ? 1'b1 : 1'b0), sector_count[7:0]};
-
-                    if (select_lba) begin
-                        // LBA
-                        start_chs2lba           <= 1'b0;
-                        mmc_access_block        <= {4'h0, lba28_address};
-                        state                   <= CMD_READ_2;
-                    end
-                    else if (~end_chs2lba) begin
-                        // Calc chs2lba
-                        start_chs2lba           <= 1'b1;
-                    end
-                    else begin
-                        start_chs2lba           <= 1'b0;
-                        mmc_access_block        <= chs2lba;
-                        state                   <= CMD_READ_2;
-                    end
+                    state                       <= SET_BLOCK_ADDRESS;
+                    ret_state                   <= CMD_READ_2;
                 end
 
                 // Set Address to MMC drive
@@ -747,7 +738,6 @@ module KFMMC_IDE #(
                         shift_fifo              <= 1'b0;
                         mmc_read_data           <= 1'b1;    // Dummy read
                         remaining_sector_count  <= remaining_sector_count - 1'b1;
-                        ret_state               <= CMD_READ_2;
                         state                   <= CMD_READ_6;
                     end
                     else if (mmc_read_byte_interrupt) begin
@@ -773,19 +763,131 @@ module KFMMC_IDE #(
                 CMD_READ_6: begin
                     shift_fifo                  <= 1'b0;
                     mmc_read_data               <= 1'b0;
+                    mmc_access_block            <= mmc_access_block + 1'b1;
 
                     if (error_flag)
                         state                   <= IDLE;
-                    else
+                    else begin
                         state                   <= TRANS_SECTOR_1;
+                        ret_state               <= CMD_READ_2;
+                    end
                 end
 
 
+                // Set sector count and calculate LBA
                 CMD_WRITE_1: begin
-                    // TODO:
-                   error_flag                   <= 1'b1;
-                   error                        <= 8'b00000100;
-                   state                        <= IDLE;
+                    state                       <= SET_BLOCK_ADDRESS;
+                    ret_state                   <= CMD_WRITE_2;
+                end
+
+                // Set Address to MMC drive
+                CMD_WRITE_2: begin
+                    mmc_data_bus                <= mmc_access_block[7:0];
+                    mmc_ext_data_bus            <= mmc_access_block[31:8];
+
+                    if (|remaining_sector_count) begin
+                        mmc_write_block_address <= 1'b1;
+                        trans_fifo_index        <= access_block_size;
+                        state                   <= CMD_WRITE_3;
+                    end
+                    else begin
+                        // Complete
+                        state                   <= IDLE;
+                    end
+                end
+
+                // Get data from host
+                CMD_WRITE_3: begin
+                    busy                        <= 1'b0;
+                    data_request                <= 1'b1;
+                    mmc_write_block_address     <= 1'b0;
+                    fifo_in                     <= latch_data[7:0];
+
+                    if ((~write_command) || (ide_address != 3'b000)) begin
+                        shift_fifo              <= 1'b0;
+                    end
+                    else begin
+                        shift_fifo              <= 1'b1;
+                        trans_fifo_index        <= {(trans_fifo_index[10:1] - 1'b1), 1'b0};
+                        state                   <= CMD_WRITE_4;
+                    end
+                end
+
+                CMD_WRITE_4: begin
+                    fifo_in                     <= latch_data[15:8];
+                    shift_fifo                  <= 1'b1;
+
+                    if (|trans_fifo_index)
+                        state                   <= CMD_WRITE_3;
+                    else begin
+                        busy                    <= 1'b1;
+                        data_request            <= 1'b0;
+                        state                   <= CMD_WRITE_5;
+                    end
+                end
+
+                // Start block write
+                CMD_WRITE_5: begin
+                    shift_fifo                  <= 1'b0;
+                    mmc_data_bus                <= 8'h81;   // 0x81 = Write command
+                    mmc_write_access_command    <= 1'b1;
+                    state                       <= CMD_WRITE_6;
+                end
+
+                // Wait
+                CMD_WRITE_6: begin
+                    mmc_write_access_command    <= 1'b0;
+
+                    if (mmc_write_interface_error) begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b1;    // Dummy read
+                        mmc_write_data          <= 1'b0;
+                        error_flag              <= 1'b1;
+                        error                   <= 8'b01000000;
+                        state                   <= CMD_WRITE_8;
+                    end
+                    else if (mmc_write_completion_interrupt) begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b1;    // Dummy read
+                        mmc_write_data          <= 1'b0;
+                        remaining_sector_count  <= remaining_sector_count - 1'b1;
+                        state                   <= CMD_WRITE_8;
+                    end
+                    else if (mmc_request_write_data_interrupt) begin
+                        mmc_data_bus            <= fifo[access_block_size - 1];
+                        shift_fifo              <= 1'b1;
+                        mmc_read_data           <= 1'b0;
+                        mmc_write_data          <= 1'b1;
+                        state                   <= CMD_WRITE_7;
+                    end
+                    else begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b0;
+                        mmc_write_data          <= 1'b0;
+                    end
+                end
+
+                // Write
+                CMD_WRITE_7: begin
+                    shift_fifo                  <= 1'b0;
+                    mmc_write_data              <= 1'b0;
+
+                    if (~mmc_request_write_data_interrupt)
+                        state                   <= CMD_WRITE_6;
+                end
+
+                // End of block write
+                CMD_WRITE_8: begin
+                    shift_fifo                  <= 1'b0;
+                    mmc_read_data               <= 1'b0;
+                    mmc_write_data              <= 1'b0;
+                    mmc_access_block            <= mmc_access_block + 1'b1;
+
+                    if (error_flag)
+                        state                   <= IDLE;
+                    else begin
+                        state                   <= CMD_WRITE_2;
+                    end
                 end
 
                 CMD_SEEK: begin
@@ -796,6 +898,29 @@ module KFMMC_IDE #(
                     error_flag                  <= 1'b1;
                     error                       <= 8'b00000100;
                     state                       <= IDLE;
+                end
+
+
+
+                SET_BLOCK_ADDRESS: begin
+                    // Set sector count (256-1)
+                    remaining_sector_count      <= {(sector_count[7:0] == 8'h000 ? 1'b1 : 1'b0), sector_count[7:0]};
+
+                    if (select_lba) begin
+                        // LBA
+                        start_chs2lba           <= 1'b0;
+                        mmc_access_block        <= {4'h0, lba28_address};
+                        state                   <= ret_state;
+                    end
+                    else if (~end_chs2lba) begin
+                        // Calc chs2lba
+                        start_chs2lba           <= 1'b1;
+                    end
+                    else begin
+                        start_chs2lba           <= 1'b0;
+                        mmc_access_block        <= chs2lba;
+                        state                   <= ret_state;
+                    end
                 end
 
 
