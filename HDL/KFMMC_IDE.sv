@@ -40,11 +40,9 @@ module KFMMC_IDE #(
     //
     logic           mmc_reset;
     // Control signal
-    logic   [7:0]   mmc_internal_data_bus;
-    logic           mmc_write_block_address_1;
-    logic           mmc_write_block_address_2;
-    logic           mmc_write_block_address_3;
-    logic           mmc_write_block_address_4;
+    logic   [7:0]   mmc_data_bus;
+    logic   [24:0]  mmc_ext_data_bus;
+    logic           mmc_write_block_address;
     logic           mmc_write_access_command;
     logic           mmc_write_data;
 
@@ -61,7 +59,7 @@ module KFMMC_IDE #(
     logic           mmc_write_interface_error;
 
     // External input/output
-    logic           mmc_block_read_interrupt;
+    logic           mmc_read_byte_interrupt;
     logic           mmc_read_completion_interrupt;
     logic           mmc_request_write_data_interrupt;
     logic           mmc_write_completion_interrupt;
@@ -74,11 +72,13 @@ module KFMMC_IDE #(
         .clock                              (clock),
         .reset                              (reset | mmc_reset),
 
-        .internal_data_bus                  (mmc_internal_data_bus),
-        .write_block_address_1              (mmc_write_block_address_1),
-        .write_block_address_2              (mmc_write_block_address_2),
-        .write_block_address_3              (mmc_write_block_address_3),
-        .write_block_address_4              (mmc_write_block_address_4),
+        .data_bus                           (mmc_data_bus),
+        .data_bus_extension                 (mmc_ext_data_bus),
+        .write_block_address_1              (1'b0),
+        .write_block_address_2              (1'b0),
+        .write_block_address_3              (1'b0),
+        .write_block_address_4              (1'b0),
+        .write_block_address_extension      (mmc_write_block_address),
         .write_access_command               (mmc_write_access_command),
         .write_data                         (mmc_write_data),
 
@@ -92,7 +92,7 @@ module KFMMC_IDE #(
         .read_crc_error                     (mmc_read_crc_error),
         .write_interface_error              (mmc_write_interface_error),
 
-        .block_read_interrupt               (mmc_block_read_interrupt),
+        .read_byte_interrupt                (mmc_read_byte_interrupt),
         .read_completion_interrupt          (mmc_read_completion_interrupt),
         .request_write_data_interrupt       (mmc_request_write_data_interrupt),
         .write_completion_interrupt         (mmc_write_completion_interrupt),
@@ -509,19 +509,23 @@ module KFMMC_IDE #(
                     CMD_EXE_DEVICE_DIAG,
                     CMD_IDENTIFY_DEVICE_1, CMD_IDENTIFY_DEVICE_2,
                     CMD_INIT_DEVICE_PARAM,
-                    CMD_READ_1,
+                    CMD_READ_1, CMD_READ_2, CMD_READ_3, CMD_READ_4, CMD_READ_5, CMD_READ_6, 
                     CMD_WRITE_1,
                     CMD_SEEK,
                     CMD_NO_SUPPORT,
                     TRANS_SECTOR_1, TRANS_SECTOR_2, TRANS_SECTOR_3, TRANS_SECTOR_4, TRANS_SECTOR_5
                 } state_t;
     state_t state;
+    state_t ret_state;
     logic   [7:0]   command;
     logic   [10:0]  trans_fifo_index;
+    logic   [31:0]  mmc_access_block;
+    logic   [8:0]   remaining_sector_count;
 
     always_ff @(negedge clock, posedge reset) begin
         if (reset) begin
             state                       <= RESET;
+            ret_state                   <= RESET;
             mmc_reset                   <= 1'b0;
             // registers
             busy                        <= 1'b1;
@@ -534,21 +538,23 @@ module KFMMC_IDE #(
             logical_cylinder            <= 16'h03FF;
             logical_head                <= 4'hF;
             logical_spt                 <= 8'h3F;
-            command                     <= 8'h00;
             // fifo
             fifo_in                     <= 1'b00;
             shift_fifo                  <= 1'b0;
             // commands
             identify_index              <= 10'h000;
             // mmc
-            mmc_internal_data_bus       <= 8'hFF;
-            mmc_write_block_address_1   <= 1'b0;
-            mmc_write_block_address_2   <= 1'b0;
-            mmc_write_block_address_3   <= 1'b0;
-            mmc_write_block_address_4   <= 1'b0;
-            mmc_write_access_command    <= 1'b0;    // internal_data_bus = 8'h80 is read / = 8'h81 is write
+            mmc_data_bus                <= 8'hFF;
+            mmc_ext_data_bus            <= 24'hFFFFFF;
+            mmc_write_block_address     <= 1'b0;
+            mmc_write_access_command    <= 1'b0;
             mmc_write_data              <= 1'b0;
             mmc_read_data               <= 1'b0;
+            // IDE command
+            command                     <= 8'h00;
+            trans_fifo_index            <= 10'h000;
+            mmc_access_block            <= 32'h00000000;
+            remaining_sector_count      <= 9'h000;
         end
         else if ((write_control) && (latch_address == 3'b110) && (latch_data[2] == 1'b1)) begin
             mmc_reset                   <= 1'b1;
@@ -571,15 +577,15 @@ module KFMMC_IDE #(
                     error_flag                  <= 1'b0;
                     error                       <= 8'h01;
                     // mmc
-                    command                     <= 8'h00;
-                    mmc_internal_data_bus       <= 8'hFF;
-                    mmc_write_block_address_1   <= 1'b0;
-                    mmc_write_block_address_2   <= 1'b0;
-                    mmc_write_block_address_3   <= 1'b0;
-                    mmc_write_block_address_4   <= 1'b0;
+                    mmc_data_bus                <= 8'hFF;
+                    mmc_ext_data_bus            <= 24'hFFFFFF;
+                    mmc_write_block_address     <= 1'b0;
                     mmc_write_access_command    <= 1'b0;
                     mmc_write_data              <= 1'b0;
                     mmc_read_data               <= 1'b0;
+                    // IDE command
+                    command                     <= 8'h00;
+                    trans_fifo_index            <= 10'h000;
                 end
 
                 WAIT_TO_RESET: begin
@@ -614,6 +620,12 @@ module KFMMC_IDE #(
                 end
 
                 EXEC_COMMAND: begin
+                    busy                        <= 1'b1;
+                    device_ready                <= 1'b0;
+                    data_request                <= 1'b0;
+                    error_flag                  <= 1'b0;
+                    error                       <= 8'b00000000;
+
                     casez (command)
                         8'h08: state            <= CMD_DEVICE_RESET;        // DEVICE_RESET
                         8'h90: state            <= CMD_EXE_DEVICE_DIAG;     // EXECUTE DEVICE DIAGNOSTIC
@@ -649,12 +661,13 @@ module KFMMC_IDE #(
                 CMD_IDENTIFY_DEVICE_2: begin
                     if (identify_index < access_block_size) begin
                         identify_index          <= identify_index + 1'b1;
-                        fifo_in                 <= ~identify_index[0] ? identify_out[15:8] : identify_out[7:0];
+                        fifo_in                 <= identify_index[0] ? identify_out[15:8] : identify_out[7:0];
                         shift_fifo              <= 1'b1;
                     end
                     else begin
                         fifo_in                 <= 8'h00;
                         shift_fifo              <= 1'b0;
+                        ret_state               <= IDLE;
                         state                   <= TRANS_SECTOR_1;
                     end
                 end
@@ -673,12 +686,100 @@ module KFMMC_IDE #(
                     end
                 end
 
+                // Set sector count and calculate LBA
                 CMD_READ_1: begin
-                    // TODO:
-                   error_flag                   <= 1'b1;
-                   error                        <= 8'b00000100;
-                   state                        <= IDLE;
+                    // Set sector count (256-1)
+                    remaining_sector_count      <= {(sector_count[7:0] == 8'h000 ? 1'b1 : 1'b0), sector_count[7:0]};
+
+                    if (select_lba) begin
+                        // LBA
+                        start_chs2lba           <= 1'b0;
+                        mmc_access_block        <= {4'h0, lba28_address};
+                        state                   <= CMD_READ_2;
+                    end
+                    else if (~end_chs2lba) begin
+                        // Calc chs2lba
+                        start_chs2lba           <= 1'b1;
+                    end
+                    else begin
+                        start_chs2lba           <= 1'b0;
+                        mmc_access_block        <= chs2lba;
+                        state                   <= CMD_READ_2;
+                    end
                 end
+
+                // Set Address to MMC drive
+                CMD_READ_2: begin
+                    mmc_data_bus                <= mmc_access_block[7:0];
+                    mmc_ext_data_bus            <= mmc_access_block[31:8];
+
+                    if (|remaining_sector_count) begin
+                        // Start block read
+                        mmc_write_block_address <= 1'b1;
+                        state                   <= CMD_READ_3;
+                    end
+                    else begin
+                        // Complete
+                        state                   <= IDLE;
+                    end
+                end
+
+                // Start block read
+                CMD_READ_3: begin
+                    mmc_data_bus                <= 8'h80;   // 0x80 = Read command
+                    mmc_write_block_address     <= 1'b0;
+                    mmc_write_access_command    <= 1'b1;
+                    state                       <= CMD_READ_4;
+                end
+
+                // Wait
+                CMD_READ_4: begin
+                    mmc_write_access_command    <= 1'b0;
+
+                    if (mmc_read_interface_error | mmc_read_crc_error) begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b1;    // Dummy read
+                        error_flag              <= 1'b1;
+                        error                   <= 8'b01000000;
+                        state                   <= CMD_READ_6;
+                    end
+                    else if (mmc_read_completion_interrupt) begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b1;    // Dummy read
+                        remaining_sector_count  <= remaining_sector_count - 1'b1;
+                        ret_state               <= CMD_READ_2;
+                        state                   <= CMD_READ_6;
+                    end
+                    else if (mmc_read_byte_interrupt) begin
+                        fifo_in                 <= mmc_read_data_byte;
+                        shift_fifo              <= 1'b1;
+                        mmc_read_data           <= 1'b1;
+                        state                   <= CMD_READ_5;
+                    end
+                    else begin
+                        shift_fifo              <= 1'b0;
+                        mmc_read_data           <= 1'b0;
+                    end
+                end
+
+                // Read
+                CMD_READ_5: begin
+                    shift_fifo                  <= 1'b0;
+                    mmc_read_data               <= 1'b0;
+                    state                       <= CMD_READ_4;
+                end
+
+                // End of block read
+                CMD_READ_6: begin
+                    shift_fifo                  <= 1'b0;
+                    mmc_read_data               <= 1'b0;
+
+                    if (error_flag)
+                        state                   <= IDLE;
+                    else
+                        state                   <= TRANS_SECTOR_1;
+                end
+
 
                 CMD_WRITE_1: begin
                     // TODO:
@@ -688,9 +789,6 @@ module KFMMC_IDE #(
                 end
 
                 CMD_SEEK: begin
-                    // TODO:
-                    error_flag                  <= 1'b1;
-                    error                       <= 8'b00000100;
                     state                       <= IDLE;
                 end
 
@@ -699,6 +797,7 @@ module KFMMC_IDE #(
                     error                       <= 8'b00000100;
                     state                       <= IDLE;
                 end
+
 
 
                 TRANS_SECTOR_1: begin
@@ -731,8 +830,7 @@ module KFMMC_IDE #(
                     else begin
                         busy                    <= 1'b1;
                         data_request            <= 1'b0;
-                        // TODO:
-                        state                   <= IDLE;
+                        state                   <= ret_state;
                     end
                 end
 
@@ -854,7 +952,7 @@ module KFMMC_IDE #(
         else if (command_cs)
             casez (ide_address)
                 3'b000: // Data Register
-                    ide_data_bus_out <= {fifo[access_block_size - 1], fifo[access_block_size - 2]};
+                    ide_data_bus_out <= {fifo[access_block_size - 2], fifo[access_block_size - 1]};
                 3'b001: // Error Register
                     ide_data_bus_out <= {8'h00, error};
                 3'b010: // Sector Count Register
