@@ -773,6 +773,8 @@ module KFMMC_IDE #(
 
                     if (error_flag)
                         state                   <= IDLE;
+                    else if ((command == 8'h40) || (command == 8'h41))
+                        state                   <= CMD_READ_2;
                     else begin
                         state                   <= TRANS_SECTOR_1;
                         ret_state               <= CMD_READ_2;
