@@ -119,6 +119,7 @@ module KFMMC_IDE #(
     logic           command_cs;
     logic           control_cs;
     logic           write_command;
+    logic           write_control;
 
 
     always_ff @(negedge clock, posedge reset) begin
