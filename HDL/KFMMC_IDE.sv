@@ -649,7 +649,7 @@ module KFMMC_IDE #(
                         8'h41: state            <= CMD_READ_1;              // READ VERIFY SECTOR(S) with retry
                         8'hC4: state            <= CMD_READ_1;              // READ MULTIPLE
                         8'hC5: state            <= CMD_WRITE_1;             // WRITE MULTIPLE
-                        8'hC6: state            <= CMD_SET_MULTIPLE;        // SET MULTIPLE
+//                        8'hC6: state            <= CMD_SET_MULTIPLE;        // SET MULTIPLE
                         8'h70: state            <= CMD_SEEK;                // SEEK
                         default: state          <= CMD_NO_SUPPORT;
                     endcase
