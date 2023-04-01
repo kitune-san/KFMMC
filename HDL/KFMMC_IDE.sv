@@ -447,7 +447,7 @@ module KFMMC_IDE #(
     //
     // FIFO
     //
-    logic   [7:0]   fifo[access_block_size-1:0];
+    logic   [7:0]   fifo[0:access_block_size-1];
     logic   [7:0]   fifo_in;
     logic           shift_fifo;
 
@@ -503,7 +503,7 @@ module KFMMC_IDE #(
     //
     // Identify
     //
-    logic   [15:0]  identify[256:0];
+    logic   [15:0]  identify[0:256];
     logic   [9:0]   identify_index;
     wire    [15:0]  identify_out    = identify[identify_index[8:1]];
 
